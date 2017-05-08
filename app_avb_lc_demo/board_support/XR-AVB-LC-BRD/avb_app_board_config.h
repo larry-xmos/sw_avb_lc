@@ -21,4 +21,7 @@
 #define AVB_GPIO_TILE           1
 
 /** Add sine wave synthesis from channels ``I2S_SYNTH_FROM*2`` upwards in the I2S component */
-#define I2S_SYNTH_FROM 1
+#define I2S_SYNTH_FROM 0 /* Note this is the channel number to start synth from, not a 0/1 enable value */
+
+/** Flash selected channel LED to indicate signal output to I2S with amplitude over set threshold */
+#define SOUND_ACTIVITY_LEDS 1

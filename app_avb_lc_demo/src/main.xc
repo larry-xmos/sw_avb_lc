@@ -106,7 +106,11 @@ media_input_fifo_t ififos[AVB_NUM_MEDIA_INPUTS];
   #define ififos null
 #endif
 
-[[combinable]] void application_task(client interface avb_interface avb, server interface avb_1722_1_control_callbacks i_1722_1_entity);
+[[combinable]] void application_task(client interface avb_interface avb,
+#if SOUND_ACTIVITY_LEDS
+                                     chanend c_sound_activity,
+#endif
+                                     server interface avb_1722_1_control_callbacks i_1722_1_entity);
 
 [[distributable]] void audio_hardware_setup(void)
 {
@@ -197,6 +201,10 @@ int main(void)
   interface srp_interface i_srp;
   interface avb_1722_1_control_callbacks i_1722_1_entity;
 
+#if SOUND_ACTIVITY_LEDS
+  chan c_sound_activity;
+#endif
+
   par
   {
     on ETHERNET_DEFAULT_TILE: avb_ethernet_server(avb_ethernet_ports,
@@ -232,6 +240,9 @@ int main(void)
                  MASTER_TO_WORDCLOCK_RATIO,
                  ififos,
                  ofifos,
+#if SOUND_ACTIVITY_LEDS
+                 c_sound_activity,
+#endif
                  c_media_ctl[0],
                  0);
     }
@@ -268,7 +279,11 @@ int main(void)
                    c_mac_tx[MAC_TX_TO_SRP]);
     }
 
-    on tile[1]: application_task(i_avb[AVB_MANAGER_TO_DEMO], i_1722_1_entity);
+    on tile[1]: application_task(i_avb[AVB_MANAGER_TO_DEMO],
+#if SOUND_ACTIVITY_LEDS
+                                 c_sound_activity,
+#endif
+                                 i_1722_1_entity);
 
     on tile[0]: avb_1722_1_maap_task(otp_ports0,
                                     i_avb[AVB_MANAGER_TO_1722_1],
@@ -284,13 +299,25 @@ int main(void)
 
 /** The main application control task **/
 [[combinable]]
-void application_task(client interface avb_interface avb, server interface avb_1722_1_control_callbacks i_1722_1_entity)
+void application_task(client interface avb_interface avb,
+#if SOUND_ACTIVITY_LEDS
+                      chanend c_sound_activity,
+#endif
+                      server interface avb_1722_1_control_callbacks i_1722_1_entity)
 {
   int button_val;
   int buttons_active = 1;
   unsigned buttons_timeout;
   int selected_chan = 0;
   timer button_tmr;
+#if SOUND_ACTIVITY_LEDS
+  unsigned flashing_time;
+  int flashing_on = 0;
+  timer flashing_tmr;
+  int sound_activity = 0;
+
+  flashing_tmr :> flashing_time;
+#endif
 
   p_mute_led_remote <: ~0;
   if (AVB_NUM_SINKS > 0) {
@@ -389,6 +416,17 @@ void application_task(client interface avb_interface avb, server interface avb_1
         button_val = new_button_val;
         break;
       }
+#if SOUND_ACTIVITY_LEDS
+      case flashing_tmr when timerafter(flashing_time) :> void:
+      {
+        p_chan_leds <: ~((!((sound_activity >> selected_chan) & 1) | flashing_on) * (1 << selected_chan));
+        flashing_on ^= 1;
+        flashing_time += 10000000;
+        break;
+      }
+      case c_sound_activity :> sound_activity:
+        break;
+#endif
       case !buttons_active => button_tmr when timerafter(buttons_timeout) :> void:
       {
         buttons_active = 1;
